@@ -1,0 +1,25 @@
+# Environment
+.env
+
+# Logs
+logs/
+*.log
+
+# Local storage
+storage/*
+!storage/.gitkeep
+
+# Build
+bin/
+tmp/
+
+# Test coverage
+coverage.out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
