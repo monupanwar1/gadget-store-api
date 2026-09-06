@@ -6,6 +6,7 @@ import (
 	"gadget-store-api/internal/database"
 	"gadget-store-api/internal/logger"
 	"gadget-store-api/internal/model"
+	"log/slog"
 	"net/http"
 	"os"
 )
@@ -16,7 +17,16 @@ type HealthResponse struct {
 
 func main() {
 	cfg := config.Load()
-	log := logger.New()
+	log, logFile, err := logger.New("info", "")
+
+	if err != nil {
+		slog.Error("failed to initialize logger", "error", err)
+		os.Exit(1)
+	}
+
+	if logFile != nil {
+		defer logFile.Close()
+	}
 
 	if err := os.MkdirAll("data", 0755); err != nil {
 		log.Error("failed to create data directory", "error", err)
