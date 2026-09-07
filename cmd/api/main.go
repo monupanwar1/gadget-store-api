@@ -67,10 +67,12 @@ func main() {
 
 	// handler
 	healthHandler := handler.NewHealthHandler(log)
+	productHandler := handler.NewProductHandler(log, db)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthHandler.Health)
+	mux.HandleFunc("POST /products", productHandler.Create)
 
 	address := ":" + cfg.Port
 

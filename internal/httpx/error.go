@@ -14,7 +14,7 @@ type Envelope struct {
 	Error Error `json:"error"`
 }
 
-func error(w http.ResponseWriter, status int, message string, code string) {
+func ErrorResponse(w http.ResponseWriter, status int, message string, code string) {
 
 	w.Header().Set("Content-Type", "application/json")
 
