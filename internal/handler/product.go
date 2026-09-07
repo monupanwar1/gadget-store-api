@@ -63,3 +63,166 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 }
+
+func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
+
+	var products []model.Product
+
+	if err := h.db.Find(&products).Error; err != nil {
+		h.log.Error("failed to fetch products", "error", err)
+
+		httpx.ErrorResponse(w, http.StatusInternalServerError, "failed to fetch products", "INTERNAL_ERROR")
+		return
+	}
+
+	h.log.Info("Products fetched", "count", len(products))
+
+	response := make(dto.ProductListResponse, 0, len(products))
+
+	for _, product := range products {
+		response = append(response, dto.ProductResponse{
+			ID:          product.ID,
+			Name:        product.Name,
+			Description: product.Description,
+			Price:       product.Price,
+			Image:       product.Image,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode products response", "error", err)
+	}
+
+}
+
+func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+
+	id := r.PathValue("id")
+
+	var product model.Product
+
+	if err := h.db.First(&product, id).Error; err != nil {
+		h.log.Error("failed to fetch product", "id", id, "error", err)
+
+		httpx.ErrorResponse(
+			w,
+			http.StatusNotFound,
+			"product not found",
+			"PRODUCT_NOT_FOUND",
+		)
+		return
+	}
+
+	h.log.Info("Product fetched", "id", product.ID)
+
+	response := dto.ProductResponse{
+		ID:          product.ID,
+		Name:        product.Name,
+		Description: product.Description,
+		Price:       product.Price,
+		Image:       product.Image,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode product response", "error", err)
+	}
+
+}
+
+func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
+
+	id := r.PathValue("id")
+
+	var product model.Product
+
+	if err := h.db.First(&product, id).Error; err != nil {
+		h.log.Error("failed to find product for update", "id", id, "error", err)
+
+		httpx.ErrorResponse(w, http.StatusNotFound, "product not found",
+			"PRODUCT_NOT_FOUND")
+
+		return
+	}
+
+	var req dto.UpdateProductRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.log.Error("failed to decode update product request", "id", id, "error", err)
+
+		httpx.ErrorResponse(w, http.StatusBadRequest, "invalid request body",
+			"INVALID_REQUEST")
+
+		return
+	}
+
+	product.Name = req.Name
+	product.Description = req.Description
+	product.Price = req.Price
+	product.Image = req.Image
+
+	if err := h.db.Save(&product).Error; err != nil {
+		h.log.Error("failed to update product", "id", id, "error", err)
+
+		httpx.ErrorResponse(
+			w,
+			http.StatusInternalServerError,
+			"failed to update product",
+			"INTERNAL_ERROR",
+		)
+		return
+	}
+	h.log.Info("product updated", "id", product.ID)
+
+	response := dto.ProductResponse{
+		ID:          product.ID,
+		Name:        product.Name,
+		Description: product.Description,
+		Price:       product.Price,
+		Image:       product.Image,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode product response", "id", id, "error", err)
+	}
+
+}
+
+func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
+
+	id := r.PathValue("id")
+
+	var product model.Product
+
+	if err := h.db.First(&product, id).Error; err != nil {
+		h.log.Error("failed to find product for deletion ", "id", id, "error", err)
+
+		httpx.ErrorResponse(w, http.StatusNotFound, "product not found", "PRODUCT_NOT_FOUND")
+		return
+	}
+
+	if err := h.db.Delete(&product).Error; err != nil {
+		h.log.Error("failed to delete product", "id", id, "error", err)
+
+		httpx.ErrorResponse(w, http.StatusInternalServerError, "failed to delete product", "INTERNAL_ERROR")
+		return
+	}
+
+	h.log.Info("Product Deleted", "id", product.ID)
+
+	w.Header().Set("Content-Type", "application/json")
+
+	w.WriteHeader(http.StatusOK)
+
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"message": "product deleted successfully",
+	})
+
+}

@@ -14,3 +14,6 @@ type ProductResponse struct {
 	Price       float64 `json:"price"`
 	Image       string  `json:"image"`
 }
+
+type ProductListResponse []ProductResponse
+type UpdateProductRequest CreateProductRequest
