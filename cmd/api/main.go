@@ -75,7 +75,7 @@ func main() {
 	mux.HandleFunc("POST /products", productHandler.Create)
 	mux.HandleFunc("GET /products", productHandler.GetAll)
 	mux.HandleFunc("GET /products/{id}", productHandler.GetByID)
-	mux.HandleFunc("PUT /products/{id}", productHandler.Update)
+	mux.HandleFunc("PATCH /products/{id}", productHandler.Update)
 	mux.HandleFunc("DELETE /products/{id}", productHandler.Delete)
 
 	address := ":" + cfg.Port

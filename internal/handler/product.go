@@ -199,21 +199,51 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req dto.UpdateProductRequest
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		h.log.Error("Failed to parse product form", "error", err)
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.log.Error("failed to decode update product request", "id", id, "error", err)
-
-		httpx.ErrorResponse(w, http.StatusBadRequest, "invalid request body",
-			"INVALID_REQUEST")
-
+		httpx.ErrorResponse(w, http.StatusBadRequest, "invalid form data", "INVALID_REQUEST")
 		return
+
 	}
 
-	product.Name = req.Name
-	product.Description = req.Description
-	product.Price = req.Price
-	product.Image = req.Image
+	name := r.FormValue("name")
+	if name != "" {
+		product.Name = name
+	}
+
+	description := r.FormValue("description")
+	if description != "" {
+		product.Description = description
+	}
+
+	price := r.FormValue("price")
+
+	if price != "" {
+		value, err := strconv.ParseFloat(price, 64)
+		if err != nil {
+			h.log.Error("invalid product price", "error", err)
+			httpx.ErrorResponse(w, http.StatusBadRequest, "invalid price", "INVALID_PRICE")
+			return
+		}
+		product.Price = value
+	}
+
+	file, handler, err := r.FormFile("images")
+
+	if err == nil {
+		defer file.Close()
+
+		image, err := storage.SaveImage(file, handler.Filename)
+
+		if err != nil {
+			h.log.Error("failed to save product image", "error", err)
+			httpx.ErrorResponse(w, http.StatusInternalServerError, "failed to save image", "INTERNAL_ERROR")
+			return
+		}
+		product.Image = image
+
+	}
 
 	if err := h.db.Save(&product).Error; err != nil {
 		h.log.Error("failed to update product", "id", id, "error", err)
