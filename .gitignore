@@ -7,7 +7,7 @@ logs/
 
 # Local storage
 storage/*
-!storage/.gitkeep
+
 
 # Build
 bin/
