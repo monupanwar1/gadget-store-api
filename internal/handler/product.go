@@ -5,8 +5,10 @@ import (
 	"gadget-store-api/internal/dto"
 	"gadget-store-api/internal/httpx"
 	"gadget-store-api/internal/model"
+	"gadget-store-api/internal/storage"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"gorm.io/gorm"
 )
@@ -25,20 +27,67 @@ func NewProductHandler(log *slog.Logger, db *gorm.DB) *ProductHandler {
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
-	var req dto.CreateProductRequest
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		h.log.Error("failed to parse product form", "error", err)
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.log.Error("failed to decode product request", "error", err)
+		httpx.ErrorResponse(
+			w,
+			http.StatusBadRequest,
+			"invalid form data",
+			"INVALID_REQUEST",
+		)
+		return
 
-		httpx.ErrorResponse(w, http.StatusBadRequest, "invalid request body", "INVALID_REQUEST")
+	}
+
+	name := r.FormValue("name")
+	description := r.FormValue("description")
+	price, err := strconv.ParseFloat(r.FormValue("price"), 64)
+
+	if err != nil {
+		h.log.Error("invalid product price", "error", err)
+
+		httpx.ErrorResponse(
+			w,
+			http.StatusBadRequest,
+			"invalid price",
+			"INVALID_PRICE",
+		)
+		return
+	}
+
+	file, header, err := r.FormFile("images")
+	if err != nil {
+		h.log.Error("failed to get product image", "error", err)
+
+		httpx.ErrorResponse(
+			w,
+			http.StatusBadRequest,
+			"image is required",
+			"IMAGE_REQUIRED",
+		)
+		return
+	}
+	defer file.Close()
+
+	image, err := storage.SaveImage(file, header.Filename)
+	if err != nil {
+		h.log.Error("failed to save product image", "error", err)
+
+		httpx.ErrorResponse(
+			w,
+			http.StatusBadRequest,
+			"failed to save image",
+			"INTERNAL_ERROR",
+		)
 		return
 	}
 
 	product := model.Product{
-		Name:        req.Name,
-		Description: req.Description,
-		Price:       req.Price,
-		Image:       req.Image,
+		Name:        name,
+		Description: description,
+		Price:       price,
+		Image:       image,
 	}
 
 	if err := h.db.Create(&product).Error; err != nil {

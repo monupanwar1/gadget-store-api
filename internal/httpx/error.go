@@ -5,13 +5,13 @@ import (
 	"net/http"
 )
 
-type Error struct {
+type error struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-type Envelope struct {
-	Error Error `json:"error"`
+type envelope struct {
+	Error error `json:"error"`
 }
 
 func ErrorResponse(w http.ResponseWriter, status int, message string, code string) {
@@ -20,8 +20,8 @@ func ErrorResponse(w http.ResponseWriter, status int, message string, code strin
 
 	w.WriteHeader(status)
 
-	_ = json.NewEncoder(w).Encode(Envelope{
-		Error: Error{
+	_ = json.NewEncoder(w).Encode(envelope{
+		Error: error{
 			Code:    code,
 			Message: message,
 		},
