@@ -1,17 +1,23 @@
 package config
 
-import "os"
+import (
+	"os"
+
+	"github.com/joho/godotenv"
+)
 
 type Config struct {
 	Port string
 }
 
-func Load() Config {
+func MustLoad() Config {
 
-	port := os.Getenv("APP_PORT")
+	godotenv.Load()
+
+	port := os.Getenv("PORT")
 
 	if port == "" {
-		port = "8080"
+		panic("PORT is required")
 	}
 
 	return Config{

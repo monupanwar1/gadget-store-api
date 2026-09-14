@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"gadget-store-api/internal/config"
 	"gadget-store-api/internal/database"
 	"gadget-store-api/internal/handler"
@@ -16,7 +17,7 @@ type HealthResponse struct {
 }
 
 func main() {
-	cfg := config.Load()
+	cfg := config.MustLoad()
 
 	if err := os.MkdirAll("logs", 0755); err != nil {
 		slog.Error("failed to create logs directory", "error", err)
@@ -78,17 +79,15 @@ func main() {
 	mux.HandleFunc("PATCH /products/{id}", productHandler.Update)
 	mux.HandleFunc("DELETE /products/{id}", productHandler.Delete)
 
-	address := ":" + cfg.Port
-
 	server := http.Server{
-		Addr:    address,
+		Addr:    ":" + cfg.Port,
 		Handler: mux,
 	}
 
 	log.Info("server started", "port", cfg.Port)
-
-	if err := server.ListenAndServe(); err != nil {
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		errorLog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+
 }
