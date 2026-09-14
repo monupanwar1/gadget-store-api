@@ -1,21 +1,22 @@
-APP_NAME=gadget-store-api
+.PHONY: build run
 
-.PHONY: run build test fmt tidy clean
-APP_NAME=gadget-store-api
-
-.PHONY: run build test fmt tidy clean
-
-run:
-	go run ./cmd/api
+fmt:
+	go fmt ./...
 
 build:
-	go build -o bin/$(APP_NAME) ./cmd/api
+	@go build -o bin/api ./cmd/api
+
+run: build
+	@./bin/api
 
 test:
 	go test ./...
 
-fmt:
-	go fmt ./...
+migrate-up:
+	@go run ./cmd/migrate up
+
+migrate-down:
+	@go run ./cmd/migrate down
 
 tidy:
 	go mod tidy

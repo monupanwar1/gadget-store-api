@@ -6,7 +6,6 @@ import (
 	"gadget-store-api/internal/database"
 	"gadget-store-api/internal/handler"
 	"gadget-store-api/internal/logger"
-	"gadget-store-api/internal/model"
 	"log/slog"
 	"net/http"
 	"os"
@@ -50,11 +49,6 @@ func main() {
 	db, err := database.NewSQLite("data/gadget_store.db")
 	if err != nil {
 		errorLog.Error("failed to connect database", "error", err)
-		os.Exit(1)
-	}
-
-	if err := db.AutoMigrate(&model.Product{}); err != nil {
-		errorLog.Error("failed to migrate database", "error", err)
 		os.Exit(1)
 	}
 

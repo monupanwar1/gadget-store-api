@@ -286,4 +286,3 @@ func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		"message": "product deleted successfully",
 	})
 }
-	
