@@ -28,6 +28,7 @@ func NewProductHandler(log *slog.Logger, db *gorm.DB) *ProductHandler {
 }
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		h.log.Error("failed to parse product form", "error", err)
@@ -86,7 +87,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Image:       req.Image,
 	}
 
-	if err := h.db.Create(&product).Error; err != nil {
+	if err := h.db.WithContext(ctx).Create(&product).Error; err != nil {
 		h.log.Error("failed to create product", "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to create product", httpx.CodeInternalError)
 		return
@@ -110,9 +111,11 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 
+	ctx := r.Context()
+
 	var products []model.Product
 
-	if err := h.db.Find(&products).Error; err != nil {
+	if err := h.db.WithContext(ctx).Find(&products).Error; err != nil {
 		h.log.Error("failed to fetch products", "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to fetch products", httpx.CodeInternalError)
 		return
@@ -139,11 +142,11 @@ func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-
+	ctx := r.Context()
 	id := r.PathValue("id")
 
 	var product model.Product
-	if err := h.db.First(&product, id).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&product, id).Error; err != nil {
 		h.log.Error("failed to fetch product", "id", id, "error", err)
 		httpx.Error(w, http.StatusNotFound, "product not found", httpx.CodeNotFound)
 		return
@@ -168,10 +171,12 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 
+	ctx := r.Context()
+
 	id := r.PathValue("id")
 
 	var product model.Product
-	if err := h.db.First(&product, id).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&product, id).Error; err != nil {
 		h.log.Error("failed to find product for update", "id", id, "error", err)
 		httpx.Error(w, http.StatusNotFound, "product not found", httpx.CodeNotFound)
 		return
@@ -239,7 +244,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	product.Price = req.Price
 	product.Image = req.Image
 
-	if err := h.db.Save(&product).Error; err != nil {
+	if err := h.db.WithContext(ctx).Save(&product).Error; err != nil {
 		h.log.Error("failed to update product", "id", id, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to update product", httpx.CodeInternalError)
 		return
@@ -262,17 +267,17 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
-
+	ctx := r.Context()
 	id := r.PathValue("id")
 
 	var product model.Product
-	if err := h.db.First(&product, id).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&product, id).Error; err != nil {
 		h.log.Error("failed to find product for deletion", "id", id, "error", err)
 		httpx.Error(w, http.StatusNotFound, "product not found", httpx.CodeNotFound)
 		return
 	}
 
-	if err := h.db.Delete(&product).Error; err != nil {
+	if err := h.db.WithContext(ctx).Delete(&product).Error; err != nil {
 		h.log.Error("failed to delete product", "id", id, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to delete product", httpx.CodeInternalError)
 		return
