@@ -6,9 +6,11 @@ import (
 	"gadget-store-api/internal/database"
 	"gadget-store-api/internal/handler"
 	"gadget-store-api/internal/logger"
+	"gadget-store-api/internal/middleware"
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 )
 
 type HealthResponse struct {
@@ -73,9 +75,14 @@ func main() {
 	mux.HandleFunc("PATCH /products/{id}", productHandler.Update)
 	mux.HandleFunc("DELETE /products/{id}", productHandler.Delete)
 
+	handler := middleware.RequestId(mux)
+
 	server := http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: mux,
+		Addr:         ":" + cfg.Port,
+		Handler:      handler,
+		ReadTimeout:  time.Second * 10,
+		WriteTimeout: time.Second * 30,
+		IdleTimeout:  time.Second * 60,
 	}
 
 	log.Info("server started", "port", cfg.Port)

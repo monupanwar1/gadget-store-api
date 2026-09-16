@@ -5,6 +5,7 @@ import (
 	"errors"
 	"gadget-store-api/internal/dto"
 	"gadget-store-api/internal/httpx"
+	"gadget-store-api/internal/middleware"
 	"gadget-store-api/internal/model"
 	"gadget-store-api/internal/storage"
 	"log/slog"
@@ -29,6 +30,7 @@ func NewProductHandler(log *slog.Logger, db *gorm.DB) *ProductHandler {
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestId := middleware.RequestIDFromContext(ctx)
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		h.log.Error("failed to parse product form", "error", err)
@@ -56,7 +58,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	image, err := storage.SaveImage(file, header.Filename)
 	if err != nil {
-		h.log.Error("failed to save product image", "error", err)
+		h.log.Error("failed to save product image", "request_id", requestId, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to save image", httpx.CodeInternalError)
 		return
 	}
@@ -88,7 +90,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.db.WithContext(ctx).Create(&product).Error; err != nil {
-		h.log.Error("failed to create product", "error", err)
+		h.log.Error("failed to create product", "request_id", requestId, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to create product", httpx.CodeInternalError)
 		return
 	}
@@ -112,6 +114,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
+	requestId := middleware.RequestIDFromContext(ctx)
 
 	var products []model.Product
 
@@ -121,7 +124,7 @@ func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.log.Info("products fetched", "count", len(products))
+	h.log.Info("products fetched", "count", len(products), "request_id", requestId)
 
 	response := make(dto.ProductListResponse, 0, len(products))
 	for _, product := range products {
@@ -144,6 +147,7 @@ func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
+	requestId := middleware.RequestIDFromContext(ctx)
 
 	var product model.Product
 	if err := h.db.WithContext(ctx).First(&product, id).Error; err != nil {
@@ -152,7 +156,7 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.log.Info("product fetched", "id", product.ID)
+	h.log.Info("product fetched", "id", product.ID, "request_id", requestId)
 
 	response := dto.ProductResponse{
 		ID:          product.ID,
@@ -172,18 +176,19 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
+	requestId := middleware.RequestIDFromContext(ctx)
 
 	id := r.PathValue("id")
 
 	var product model.Product
 	if err := h.db.WithContext(ctx).First(&product, id).Error; err != nil {
-		h.log.Error("failed to find product for update", "id", id, "error", err)
+		h.log.Error("failed to find product for update", "id", "request_id", requestId, id, "error", err)
 		httpx.Error(w, http.StatusNotFound, "product not found", httpx.CodeNotFound)
 		return
 	}
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		h.log.Error("failed to parse product form", "error", err)
+		h.log.Error("failed to parse product form", "request_id", requestId, "error", err)
 		httpx.Error(w, http.StatusBadRequest, "invalid form data", httpx.CodeMalformedJSON)
 		return
 	}
@@ -208,7 +213,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if priceStr := r.FormValue("price"); priceStr != "" {
 		value, err := strconv.ParseFloat(priceStr, 64)
 		if err != nil {
-			h.log.Error("invalid product price", "error", err)
+			h.log.Error("invalid product price", "request_id", requestId, "error", err)
 			httpx.ValidationError(w, http.StatusBadRequest, "price must be a valid number", httpx.CodeValidationFailed, "price")
 			return
 		}
@@ -245,7 +250,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	product.Image = req.Image
 
 	if err := h.db.WithContext(ctx).Save(&product).Error; err != nil {
-		h.log.Error("failed to update product", "id", id, "error", err)
+		h.log.Error("failed to update product", "request_id", requestId, "id", id, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to update product", httpx.CodeInternalError)
 		return
 	}
@@ -262,28 +267,29 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.log.Error("failed to encode product response", "id", id, "error", err)
+		h.log.Error("failed to encode product response", "id", id, "request_id", requestId, "error", err)
 	}
 }
 
 func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
+	requestId := middleware.RequestIDFromContext(ctx)
 
 	var product model.Product
 	if err := h.db.WithContext(ctx).First(&product, id).Error; err != nil {
-		h.log.Error("failed to find product for deletion", "id", id, "error", err)
+		h.log.Error("failed to find product for deletion", "id", id, "request_id", requestId, "error", err)
 		httpx.Error(w, http.StatusNotFound, "product not found", httpx.CodeNotFound)
 		return
 	}
 
 	if err := h.db.WithContext(ctx).Delete(&product).Error; err != nil {
-		h.log.Error("failed to delete product", "id", id, "error", err)
+		h.log.Error("failed to delete product", "id", id, "request_id", requestId, "error", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to delete product", httpx.CodeInternalError)
 		return
 	}
 
-	h.log.Info("product deleted", "id", product.ID)
+	h.log.Info("product deleted", "id", "request_id", requestId, product.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
