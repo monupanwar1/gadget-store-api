@@ -1,0 +1,7 @@
+CREATE TABLE categories(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  created_at DATETIME,
+  updated_at DATETIME
+);

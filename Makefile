@@ -17,7 +17,9 @@ migrate-up:
 
 migrate-down:
 	@go run ./cmd/migrate down
-
+	
+migrate-force:
+	@go run ./cmd/migrate force $(VERSION)
 tidy:
 	go mod tidy
 

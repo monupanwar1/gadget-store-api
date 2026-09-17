@@ -1,0 +1,5 @@
+ALTER TABLE products
+ADD COLUMN created_at DATETIME;
+
+ALTER TABLE products
+ADD COLUMN updated_at DATETIME;

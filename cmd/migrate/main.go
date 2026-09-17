@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
@@ -27,6 +28,21 @@ func main() {
 	defer m.Close()
 
 	switch os.Args[1] {
+	case "force":
+		if len(os.Args) < 3 {
+			log.Fatal("usage: migrate force <version>")
+		}
+
+		version, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			log.Fatalf("invalid version: %v", err)
+		}
+
+		if err := m.Force(version); err != nil {
+			log.Fatal(err)
+		}
+
+	log.Printf("migration forced to version %d", version)
 	case "up":
 		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 			log.Fatal(err)
