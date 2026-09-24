@@ -61,14 +61,23 @@ func main() {
 	}
 
 	defer sqlDB.Close()
-
-	// handler
+	// handlers
 	healthHandler := handler.NewHealthHandler(log)
 	productHandler := handler.NewProductHandler(log, db)
+	categoryHandler := handler.NewCategoryHandler(log, db)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthHandler.Health)
+
+	// Category routes
+	mux.HandleFunc("POST /categories", categoryHandler.Create)
+	mux.HandleFunc("GET /categories", categoryHandler.GetAll)
+	mux.HandleFunc("GET /categories/{id}", categoryHandler.GetByID)
+	mux.HandleFunc("PATCH /categories/{id}", categoryHandler.Update)
+	mux.HandleFunc("DELETE /categories/{id}", categoryHandler.Delete)
+
+	// Product routes
 	mux.HandleFunc("POST /products", productHandler.Create)
 	mux.HandleFunc("GET /products", productHandler.GetAll)
 	mux.HandleFunc("GET /products/{id}", productHandler.GetByID)
