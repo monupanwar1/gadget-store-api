@@ -2,11 +2,13 @@ package main
 
 import (
 	"errors"
-	"gadget-store-api/internal/config"
+
+	"gadget-store-api/config"
 	"gadget-store-api/internal/database"
 	"gadget-store-api/internal/handler"
 	"gadget-store-api/internal/logger"
 	"gadget-store-api/internal/middleware"
+	"gadget-store-api/internal/service"
 	"log/slog"
 	"net/http"
 	"os"
@@ -61,7 +63,19 @@ func main() {
 	}
 
 	defer sqlDB.Close()
+
+	jwtService := service.NewJWTService(
+		cfg.PrivateKey,
+		cfg.PublicKey,
+	)
+
 	// handlers
+	authHandler := handler.NewAuthHandler(
+		log,
+		db,
+		jwtService,
+	)
+
 	healthHandler := handler.NewHealthHandler(log)
 	productHandler := handler.NewProductHandler(log, db)
 	categoryHandler := handler.NewCategoryHandler(log, db)
@@ -69,6 +83,10 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthHandler.Health)
+
+	// auth
+	mux.HandleFunc("POST /login", authHandler.Login)
+	mux.HandleFunc("POST /register", authHandler.Register)
 
 	// Category routes
 	mux.HandleFunc("POST /categories", categoryHandler.Create)

@@ -23,3 +23,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+
+
+keys
+keys/private.pem
+keys/public.pem
