@@ -69,11 +69,15 @@ func main() {
 		cfg.PublicKey,
 	)
 
+	authService := service.NewAuthService(
+		db,
+		jwtService,
+	)
+
 	// handlers
 	authHandler := handler.NewAuthHandler(
 		log,
-		db,
-		jwtService,
+		authService,
 	)
 
 	healthHandler := handler.NewHealthHandler(log)

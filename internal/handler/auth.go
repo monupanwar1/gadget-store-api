@@ -3,33 +3,35 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"net/http"
+
 	"gadget-store-api/internal/dto"
 	"gadget-store-api/internal/httpx"
 	"gadget-store-api/internal/middleware"
-	"gadget-store-api/internal/model"
 	"gadget-store-api/internal/service"
-	"gadget-store-api/internal/utils"
-	"log/slog"
-	"net/http"
 
 	"gorm.io/gorm"
 )
 
 type AuthHandler struct {
-	log *slog.Logger
-	db  *gorm.DB
-	jwt *service.JWTService
+	log  *slog.Logger
+	auth *service.AuthService
 }
 
-func NewAuthHandler(log *slog.Logger, db *gorm.DB, jwt *service.JWTService) *AuthHandler {
+func NewAuthHandler(
+	log *slog.Logger,
+	auth *service.AuthService,
+) *AuthHandler {
 	return &AuthHandler{
-		log: log,
-		db:  db,
-		jwt: jwt,
+		log:  log,
+		auth: auth,
 	}
 }
-
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Register(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 	requestID := middleware.RequestIDFromContext(ctx)
 
@@ -37,7 +39,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.log.Error(
-			"failed to decode Regsiter request",
+			"failed to decode register request",
 			"request_id", requestID,
 			"error", err,
 		)
@@ -56,7 +58,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 		if errors.As(err, &ve) {
 			h.log.Error(
-				"Register validation failed",
+				"register validation failed",
 				"request_id", requestID,
 				"field", ve.Field,
 				"error", ve.Msg,
@@ -72,12 +74,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.log.Error(
-			"Regsiter validation failed",
-			"request_id", requestID,
-			"error", err,
-		)
-
 		httpx.Error(
 			w,
 			http.StatusBadRequest,
@@ -87,69 +83,41 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// hash the password
-
-	hashedPassword, err := utils.HashPassword(req.Password)
-
+	user, err := h.auth.Register(ctx, req)
 	if err != nil {
 		h.log.Error(
-			"failed to hash password for Regsiter request",
+			"failed to register user",
 			"request_id", requestID,
 			"error", err,
 		)
 
-		httpx.Error(
-			w,
-			http.StatusInternalServerError,
-			"invalid request body",
-			httpx.CodeMalformedJSON,
-		)
-		return
-	}
-	// create user
-
-	user := model.User{
-		Name:         req.Name,
-		Email:        req.Email,
-		PasswordHash: hashedPassword,
-	}
-
-	err = h.db.WithContext(ctx).Create(&user).Error
-	if err != nil {
-		h.log.Error(
-			"failed to Register",
-			"request_id", requestID,
-			"error", err,
-		)
 		httpx.Error(
 			w,
 			http.StatusInternalServerError,
 			"failed to create user",
 			httpx.CodeInternalError,
 		)
-	}
-	h.log.Info("User Regsitered ", "id", user.ID)
-
-	if err != nil {
-		h.log.Error(
-			"failed to Register",
-			"request_id", requestID,
-			"error", err,
-		)
 		return
 	}
 
-	response := &dto.RegisterResponse{
-		Name:  user.Name,
-		Email: user.Email,
-		Role:  user.Role,
+	h.log.Info(
+		"user registered",
+		"request_id", requestID,
+		"user_id", user.ID,
+	)
+
+	response := dto.RegisterResponse{
+		Name:      user.Name,
+		Email:     user.Email,
+		Role:      user.Role,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	json.NewEncoder(w).Encode(response)
-	if err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		h.log.Error(
 			"failed to encode register response",
 			"request_id", requestID,
@@ -157,8 +125,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 }
-
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Login(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	ctx := r.Context()
 	requestID := middleware.RequestIDFromContext(ctx)
 
@@ -210,12 +180,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user model.User
-
-	if err := h.db.WithContext(ctx).
-		Select("id", "email", "password_hash", "role").
-		Where("email = ?", req.Email).
-		First(&user).Error; err != nil {
+	accessToken, refreshToken, err := h.auth.Login(ctx, req)
+	if err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpx.Error(
@@ -227,43 +193,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// todo	// bcrypt mismatch also means invalid credentials.
+		// We'll improve this error handling slightly later if needed.
+
 		h.log.Error(
-			"failed to find user",
-			"request_id", requestID,
-			"error", err,
-		)
-
-		httpx.Error(
-			w,
-			http.StatusInternalServerError,
-			"internal server error",
-			httpx.CodeInternalError,
-		)
-		return
-	}
-
-	if err := utils.ComparePassword(
-		req.Password,
-		user.PasswordHash,
-	); err != nil {
-		httpx.Error(
-			w,
-			http.StatusUnauthorized,
-			"invalid email or password",
-			httpx.CodeUnauthenticated,
-		)
-		return
-	}
-
-	accessToken, err := h.jwt.GenerateAccessToken(
-		user.ID,
-		user.Email,
-		user.Role,
-	)
-
-	if err != nil {
-		h.log.Error(
-			"failed to generate access token",
+			"failed to login",
 			"request_id", requestID,
 			"error", err,
 		)
@@ -278,7 +212,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := dto.LoginResponse{
-		AccessToken: accessToken,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
