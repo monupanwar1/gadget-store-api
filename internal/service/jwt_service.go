@@ -1,7 +1,10 @@
 package service
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -54,4 +57,21 @@ func (s *JWTService) GenerateAccessToken(
 	)
 
 	return token.SignedString(s.privateKey)
+}
+
+func GenerateRefreshToken() (string, error) {
+	b := make([]byte, 32)
+
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func HashRefreshToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+
 }
