@@ -6,12 +6,12 @@ import (
 	"net/http"
 )
 
-type healthHandler struct {
+type HealthHandler struct {
 	log *slog.Logger
 }
 
-func NewHealthHandler(log *slog.Logger) *healthHandler {
-	return &healthHandler{
+func NewHealthHandler(log *slog.Logger) *HealthHandler {
+	return &HealthHandler{
 		log: log,
 	}
 
@@ -27,7 +27,7 @@ type HealthData struct {
 	Status string `json:"status"`
 }
 
-func (h *healthHandler) Health(w http.ResponseWriter, r *http.Request) {
+func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 

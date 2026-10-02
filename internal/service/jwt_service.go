@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto/rsa"
+	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -54,4 +55,32 @@ func (s *JWTService) GenerateAccessToken(
 	)
 
 	return token.SignedString(s.privateKey)
+}
+
+func (s *JWTService) ValidateAccessToken(tokenString string) (*Claims, error) {
+
+
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+
+		if token.Method != jwt.SigningMethodRS256 {
+			return nil, errors.New("unexpected signing method")
+		}
+		return s.publicKey, nil
+	},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
+
+	return claims, nil
+
 }

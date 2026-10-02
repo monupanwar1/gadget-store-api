@@ -227,3 +227,32 @@ func (h *AuthHandler) Login(
 		)
 	}
 }
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	claims, ok := middleware.ClaimsFromContext(r.Context())
+
+	if !ok {
+		httpx.Error(
+			w,
+			http.StatusUnauthorized,
+			"authentication required",
+			httpx.CodeUnauthenticated,
+		)
+		return
+	}
+
+	response := dto.MeResponse{
+		ID:    claims.UserID,
+		Email: claims.Email,
+		Role:  claims.Role,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("failed to encode me response",
+			"error", err,
+		)
+	}
+}

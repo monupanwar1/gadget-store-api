@@ -2,10 +2,10 @@ package main
 
 import (
 	"errors"
-
 	"gadget-store-api/config"
 	"gadget-store-api/internal/database"
 	"gadget-store-api/internal/handler"
+	"gadget-store-api/internal/httpserver"
 	"gadget-store-api/internal/logger"
 	"gadget-store-api/internal/middleware"
 	"gadget-store-api/internal/service"
@@ -15,41 +15,38 @@ import (
 	"time"
 )
 
-type HealthResponse struct {
-	Status string `json:"status"`
-}
-
 func main() {
 	cfg := config.MustLoad()
 
+	// Create logs directory
 	if err := os.MkdirAll("logs", 0755); err != nil {
 		slog.Error("failed to create logs directory", "error", err)
 		os.Exit(1)
 	}
 
+	// Application logger
 	log, logFile, err := logger.New("info", "logs/info.log")
-
 	if err != nil {
 		slog.Error("failed to initialize logger", "error", err)
 		os.Exit(1)
 	}
-
 	defer logFile.Close()
 
+	// Error logger
 	errorLog, errorFile, err := logger.New("info", "logs/error.log")
-
 	if err != nil {
-		slog.Error("failed to initialize  error logger", "error", err)
+		slog.Error("failed to initialize error logger", "error", err)
 		os.Exit(1)
 	}
-
 	defer errorFile.Close()
 
+	// Create data directory
 	if err := os.MkdirAll("data", 0755); err != nil {
 		errorLog.Error("failed to create data directory", "error", err)
 		os.Exit(1)
 	}
 
+	// Database
 	db, err := database.NewSQLite("data/gadget_store.db")
 	if err != nil {
 		errorLog.Error("failed to connect database", "error", err)
@@ -61,65 +58,67 @@ func main() {
 		errorLog.Error("failed to get database connection", "error", err)
 		os.Exit(1)
 	}
-
 	defer sqlDB.Close()
 
+	// JWT service
 	jwtService := service.NewJWTService(
 		cfg.PrivateKey,
 		cfg.PublicKey,
 	)
 
+	// Auth service
 	authService := service.NewAuthService(
 		db,
 		jwtService,
 	)
 
-	// handlers
+	// Handlers
 	authHandler := handler.NewAuthHandler(
 		log,
 		authService,
 	)
 
 	healthHandler := handler.NewHealthHandler(log)
-	productHandler := handler.NewProductHandler(log, db)
-	categoryHandler := handler.NewCategoryHandler(log, db)
 
-	mux := http.NewServeMux()
+	productHandler := handler.NewProductHandler(
+		log,
+		db,
+	)
 
-	mux.HandleFunc("GET /healthz", healthHandler.Health)
+	categoryHandler := handler.NewCategoryHandler(
+		log,
+		db,
+	)
 
-	// auth
-	mux.HandleFunc("POST /login", authHandler.Login)
-	mux.HandleFunc("POST /register", authHandler.Register)
+	// HTTP service / Chi router
+	httpService := httpserver.NewHTTPService(
+		healthHandler,
+		authHandler,
+		categoryHandler,
+		productHandler,
+		jwtService,
+	)
 
-	// Category routes
-	mux.HandleFunc("POST /categories", categoryHandler.Create)
-	mux.HandleFunc("GET /categories", categoryHandler.GetAll)
-	mux.HandleFunc("GET /categories/{id}", categoryHandler.GetByID)
-	mux.HandleFunc("PATCH /categories/{id}", categoryHandler.Update)
-	mux.HandleFunc("DELETE /categories/{id}", categoryHandler.Delete)
+	// Global middleware
+	httpHandler := middleware.RequestId(
+		httpService.Handler(),
+	)
 
-	// Product routes
-	mux.HandleFunc("POST /products", productHandler.Create)
-	mux.HandleFunc("GET /products", productHandler.GetAll)
-	mux.HandleFunc("GET /products/{id}", productHandler.GetByID)
-	mux.HandleFunc("PATCH /products/{id}", productHandler.Update)
-	mux.HandleFunc("DELETE /products/{id}", productHandler.Delete)
+	// HTTP server
+	server := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: httpHandler,
 
-	handler := middleware.RequestId(mux)
-
-	server := http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  time.Second * 10,
-		WriteTimeout: time.Second * 30,
-		IdleTimeout:  time.Second * 60,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	log.Info("server started", "port", cfg.Port)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+
+	if err := server.ListenAndServe(); err != nil &&
+		!errors.Is(err, http.ErrServerClosed) {
 		errorLog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
-
 }
