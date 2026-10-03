@@ -32,6 +32,7 @@ func NewHTTPService(
 
 	r.Post("/login", authHandler.Login)
 	r.Post("/register", authHandler.Register)
+	r.With(middleware.CSRF).Post("/logout", authHandler.Logout)
 
 	r.Get("/categories", categoryHandler.GetAll)
 	r.Get("/categories/{id}", categoryHandler.GetByID)

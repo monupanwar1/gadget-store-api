@@ -10,6 +10,7 @@ import (
 	"gadget-store-api/internal/httpx"
 	"gadget-store-api/internal/middleware"
 	"gadget-store-api/internal/service"
+	"gadget-store-api/internal/utils"
 
 	"gorm.io/gorm"
 )
@@ -28,6 +29,7 @@ func NewAuthHandler(
 		auth: auth,
 	}
 }
+
 func (h *AuthHandler) Register(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -125,6 +127,7 @@ func (h *AuthHandler) Register(
 		)
 	}
 }
+
 func (h *AuthHandler) Login(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -182,7 +185,6 @@ func (h *AuthHandler) Login(
 
 	accessToken, refreshToken, err := h.auth.Login(ctx, req)
 	if err != nil {
-
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			httpx.Error(
 				w,
@@ -192,9 +194,6 @@ func (h *AuthHandler) Login(
 			)
 			return
 		}
-
-		// todo	// bcrypt mismatch also means invalid credentials.
-		// We'll improve this error handling slightly later if needed.
 
 		h.log.Error(
 			"failed to login",
@@ -211,9 +210,37 @@ func (h *AuthHandler) Login(
 		return
 	}
 
+	csrfToken, err := utils.GenerateCSRFToken()
+	if err != nil {
+		h.log.Error(
+			"failed to generate csrf token",
+			"request_id", requestID,
+			"error", err,
+		)
+
+		httpx.Error(
+			w,
+			http.StatusInternalServerError,
+			"internal server error",
+			httpx.CodeInternalError,
+		)
+		return
+	}
+
+	httpx.SetAuthCookie(
+		w,
+		accessToken,
+		refreshToken,
+		csrfToken,
+	)
+
+	h.log.Info(
+		"user logged in",
+		"request_id", requestID,
+	)
+
 	response := dto.LoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		Message: "login successful",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -228,7 +255,10 @@ func (h *AuthHandler) Login(
 	}
 }
 
-func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Me(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 
 	if !ok {
@@ -251,7 +281,68 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.log.Error("failed to encode me response",
+		h.log.Error(
+			"failed to encode me response",
+			"error", err,
+		)
+	}
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	requestID := middleware.RequestIDFromContext(ctx)
+
+	cookie, err := r.Cookie(httpx.RefreshTokenCookie)
+	if err != nil || cookie.Value == "" {
+		h.log.Error(
+			"refresh token missing during logout",
+			"request_id", requestID,
+			"error", err,
+		)
+
+		httpx.Error(
+			w,
+			http.StatusUnauthorized,
+			"refresh token required",
+			httpx.CodeUnauthenticated,
+		)
+		return
+	}
+
+	if err := h.auth.Logout(ctx, cookie.Value); err != nil {
+		h.log.Error(
+			"failed to logout user",
+			"request_id", requestID,
+			"error", err,
+		)
+
+		httpx.Error(
+			w,
+			http.StatusInternalServerError,
+			"internal server error",
+			httpx.CodeInternalError,
+		)
+		return
+	}
+
+	httpx.ClearAuthCookie(w)
+
+	h.log.Info(
+		"user logged out",
+		"request_id", requestID,
+	)
+
+	response := dto.LoginResponse{
+		Message: "logout successful",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error(
+			"failed to encode logout response",
+			"request_id", requestID,
 			"error", err,
 		)
 	}

@@ -116,3 +116,19 @@ func (s *AuthService) CreateRefreshToken(
 
 	return token, nil
 }
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	tokenHash := utils.HashRefreshToken(refreshToken)
+
+	now := time.Now()
+
+	result := s.db.WithContext(ctx).
+		Model(&model.RefreshToken{}).
+		Where("token_hash = ? AND revoked_at IS NULL", tokenHash).
+		Update("revoked_at", &now)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
+}
