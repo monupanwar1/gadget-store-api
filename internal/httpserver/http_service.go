@@ -36,9 +36,11 @@ func NewHTTPService(
 
 	r.Get("/categories", categoryHandler.GetAll)
 	r.Get("/categories/{id}", categoryHandler.GetByID)
-
+	
 	r.Get("/products", productHandler.GetAll)
 	r.Get("/products/{id}", productHandler.GetByID)
+	r.Get("/products/categories", productHandler.GetAllByCategory)
+	r.Get("/products/category/{categoryID}", productHandler.GetByCategory)
 
 	// =========================
 	// Authenticated routes

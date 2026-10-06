@@ -6,6 +6,7 @@ import (
 )
 
 type CreateProductRequest struct {
+	CategoryID  uint    `json:"category_id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Price       float64 `json:"price"`
@@ -13,11 +14,29 @@ type CreateProductRequest struct {
 }
 
 type ProductResponse struct {
+	ID           uint    `json:"id"`
+	Name         string  `json:"name"`
+	Description  string  `json:"description"`
+	Price        float64 `json:"price"`
+	Image        string  `json:"image"`
+	CategoryID   uint    `json:"category_id"`
+	CategoryName string  `json:"category_name"`
+	CategorySlug string  `json:"category_slug"`
+}
+
+type ProductItemResponse struct {
 	ID          uint    `json:"id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Price       float64 `json:"price"`
 	Image       string  `json:"image"`
+}
+
+type ProductsByCategoryResponse struct {
+	CategoryID   uint                  `json:"category_id"`
+	CategoryName string                `json:"category_name"`
+	CategorySlug string                `json:"category_slug"`
+	Products     []ProductItemResponse `json:"products"`
 }
 
 type ProductListResponse []ProductResponse
@@ -33,6 +52,14 @@ func (e *ValidationError) Error() string {
 }
 
 func (req CreateProductRequest) Validate() error {
+
+	if req.CategoryID == 0 {
+		return &ValidationError{
+			Field: "category_id",
+			Msg:   "must be greater than zero",
+		}
+	}
+
 	if strings.TrimSpace(req.Name) == "" {
 		return &ValidationError{
 			Field: "title",

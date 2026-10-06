@@ -72,6 +72,14 @@ func main() {
 		jwtService,
 	)
 
+	categoryService := service.NewCategoryService(
+		db,
+	)
+
+	productService := service.NewProductService(
+		db,
+	)
+
 	// Handlers
 	authHandler := handler.NewAuthHandler(
 		log,
@@ -80,14 +88,14 @@ func main() {
 
 	healthHandler := handler.NewHealthHandler(log)
 
-	productHandler := handler.NewProductHandler(
-		log,
-		db,
-	)
-
 	categoryHandler := handler.NewCategoryHandler(
 		log,
-		db,
+		categoryService,
+	)
+
+	productHandler := handler.NewProductHandler(
+		log,
+		productService,
 	)
 
 	// HTTP service / Chi router

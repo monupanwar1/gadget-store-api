@@ -3,28 +3,31 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"gadget-store-api/internal/dto"
-	"gadget-store-api/internal/httpx"
-	"gadget-store-api/internal/middleware"
-	"gadget-store-api/internal/model"
 	"log/slog"
 	"net/http"
 
-	"gorm.io/gorm"
+	"gadget-store-api/internal/dto"
+	"gadget-store-api/internal/httpx"
+	"gadget-store-api/internal/middleware"
+	"gadget-store-api/internal/service"
 )
 
 type CategoryHandler struct {
-	log *slog.Logger
-	db  *gorm.DB
+	log      *slog.Logger
+	category *service.CategoryService
 }
 
-func NewCategoryHandler(log *slog.Logger, db *gorm.DB) *CategoryHandler {
+func NewCategoryHandler(
+	log *slog.Logger,
+	category *service.CategoryService,
+) *CategoryHandler {
 	return &CategoryHandler{
-		log: log,
-		db:  db,
+		log:      log,
+		category: category,
 	}
 }
 
+// Create
 func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestID := middleware.RequestIDFromContext(ctx)
@@ -83,12 +86,8 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	category := model.Category{
-		Name: req.Name,
-		Slug: req.Slug,
-	}
-
-	if err := h.db.WithContext(ctx).Create(&category).Error; err != nil {
+	category, err := h.category.Create(ctx, req)
+	if err != nil {
 		h.log.Error(
 			"failed to create category",
 			"request_id", requestID,
@@ -128,16 +127,16 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetByID
 func (h *CategoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestID := middleware.RequestIDFromContext(ctx)
 
 	id := r.PathValue("id")
 
-	var category model.Category
-
-	if err := h.db.WithContext(ctx).First(&category, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	category, err := h.category.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, service.ErrCategoryNotFound) {
 			h.log.Error(
 				"category not found",
 				"id", id,
@@ -187,81 +186,15 @@ func (h *CategoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetAll
 func (h *CategoryHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestID := middleware.RequestIDFromContext(ctx)
 
-	var categories []model.Category
-
-	if err := h.db.Find(&categories).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			h.log.Error(
-				"failed to  fetch categories",
-				"request_id", requestID,
-				"error", err,
-			)
-
-			httpx.Error(
-				w,
-				http.StatusNotFound,
-				"failed to fetch categories",
-				httpx.CodeInternalError,
-			)
-			return
-		}
-
-		response := make(dto.CategoryListResponse, 0, len(categories))
-
-		for _, category := range categories {
-			response = append(response, dto.CategoryResponse{
-				ID:   category.ID,
-				Name: category.Name,
-				Slug: category.Slug,
-			})
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			h.log.Error(
-				"failed to encode categories response",
-				"request_id", requestID,
-				"error", err,
-			)
-		}
-	}
-}
-
-func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	requestID := middleware.RequestIDFromContext(ctx)
-
-	id := r.PathValue("id")
-
-	// 1. Check category exists
-	var category model.Category
-
-	if err := h.db.WithContext(ctx).First(&category, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			h.log.Error(
-				"category not found",
-				"id", id,
-				"request_id", requestID,
-			)
-
-			httpx.Error(
-				w,
-				http.StatusNotFound,
-				"category not found",
-				httpx.CodeNotFound,
-			)
-			return
-		}
-
+	categories, err := h.category.GetAll(ctx)
+	if err != nil {
 		h.log.Error(
-			"failed to fetch category",
-			"id", id,
+			"failed to fetch categories",
 			"request_id", requestID,
 			"error", err,
 		)
@@ -269,13 +202,41 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(
 			w,
 			http.StatusInternalServerError,
-			"failed to fetch category",
+			"failed to fetch categories",
 			httpx.CodeInternalError,
 		)
 		return
 	}
 
-	// 2. Decode request body
+	response := make(dto.CategoryListResponse, 0, len(categories))
+
+	for _, category := range categories {
+		response = append(response, dto.CategoryResponse{
+			ID:   category.ID,
+			Name: category.Name,
+			Slug: category.Slug,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error(
+			"failed to encode categories response",
+			"request_id", requestID,
+			"error", err,
+		)
+	}
+}
+
+// Update
+func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	requestID := middleware.RequestIDFromContext(ctx)
+
+	id := r.PathValue("id")
+
 	var req dto.UpdateCategoryRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -294,18 +255,10 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Validate request
 	if err := req.Validate(); err != nil {
 		var ve *dto.ValidationError
 
 		if errors.As(err, &ve) {
-			h.log.Error(
-				"category validation failed",
-				"request_id", requestID,
-				"field", ve.Field,
-				"error", ve.Msg,
-			)
-
 			httpx.ValidationError(
 				w,
 				http.StatusBadRequest,
@@ -316,12 +269,6 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.log.Error(
-			"category validation failed",
-			"request_id", requestID,
-			"error", err,
-		)
-
 		httpx.Error(
 			w,
 			http.StatusBadRequest,
@@ -331,16 +278,21 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Update category
-	category.Name = req.Name
-	category.Slug = req.Slug
+	category, err := h.category.Update(ctx, id, req)
+	if err != nil {
+		if errors.Is(err, service.ErrCategoryNotFound) {
+			httpx.Error(
+				w,
+				http.StatusNotFound,
+				"category not found",
+				httpx.CodeNotFound,
+			)
+			return
+		}
 
-	// 5. Save changes
-
-	if err := h.db.WithContext(ctx).Save(&category).Error; err != nil {
 		h.log.Error(
 			"failed to update category",
-			"id", category.ID,
+			"id", id,
 			"request_id", requestID,
 			"error", err,
 		)
@@ -354,14 +306,18 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6. Create response
+	h.log.Info(
+		"category updated",
+		"id", category.ID,
+		"request_id", requestID,
+	)
+
 	response := dto.CategoryResponse{
 		ID:   category.ID,
 		Name: category.Name,
 		Slug: category.Slug,
 	}
 
-	// 7. Send response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
@@ -374,23 +330,16 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 }
+
+// Delete
 func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestID := middleware.RequestIDFromContext(ctx)
 
 	id := r.PathValue("id")
 
-	var category model.Category
-
-	// 1. Check category exists
-	if err := h.db.WithContext(ctx).First(&category, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			h.log.Error(
-				"category not found",
-				"id", id,
-				"request_id", requestID,
-			)
-
+	if err := h.category.Delete(ctx, id); err != nil {
+		if errors.Is(err, service.ErrCategoryNotFound) {
 			httpx.Error(
 				w,
 				http.StatusNotFound,
@@ -401,7 +350,7 @@ func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.log.Error(
-			"failed to fetch category",
+			"failed to delete category",
 			"id", id,
 			"request_id", requestID,
 			"error", err,
@@ -410,34 +359,15 @@ func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(
 			w,
 			http.StatusInternalServerError,
-			"failed to fetch category",
-			httpx.CodeInternalError,
-		)
-		return
-	}
-
-	// 2. Delete category
-	if err := h.db.WithContext(ctx).Delete(&category).Error; err != nil {
-		h.log.Error(
-			"failed to delete category",
-			"id", category.ID,
-			"request_id", requestID,
-			"error", err,
-		)
-
-		httpx.Error(
-			w,
-			http.StatusInternalServerError,
 			"failed to delete category",
 			httpx.CodeInternalError,
 		)
 		return
 	}
 
-	// 3. Success
 	h.log.Info(
 		"category deleted",
-		"id", category.ID,
+		"id", id,
 		"request_id", requestID,
 	)
 
